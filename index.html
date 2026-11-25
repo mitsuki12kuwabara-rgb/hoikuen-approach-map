@@ -6,6 +6,7 @@
 <meta name="theme-color" content="#1f7a8c">
 <title>保育園アプローチマップ｜世田谷・杉並</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" referrerpolicy="no-referrer">
+<link rel="stylesheet" href="vendor/maplibre/maplibre-gl.css">
 <style>
   :root{
     --bg:#f3f6f7; --panel:#ffffff; --ink:#1f2a30; --sub:#6b7880; --line:#e1e7ea; --soft:#f2f6f7;
@@ -326,6 +327,10 @@
 <div class="toast" id="toast"></div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" referrerpolicy="no-referrer"></script>
+<script src="vendor/maplibre/maplibre-gl.js"></script>
+<script src="vendor/maplibre/leaflet-maplibre-gl.js"></script>
+<script src="landmarks.js"></script>
+<script src="basemap.js"></script>
 <script src="data.js"></script>
 <script>
 (function(){
@@ -375,8 +380,8 @@ function editRec(id, fn){
 /* ========== 地図 ========== */
 var map=L.map('map',{zoomControl:true}).setView([35.672,139.630],13);
 map.zoomControl.setPosition('bottomleft');
-L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,
-  attribution:"<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank' rel='noopener'>地理院タイル</a>"}).addTo(map);
+/* 地図の見え方 3段階（すっきり → 目安 → 標準）。政治家ICTの地図と同じ。basemap.js */
+var basemap=addHoikuBasemap(map,{initialMode:"landmark",position:"topleft"});
 var markers={}, layer=L.layerGroup().addTo(map), userMarker=null, userLoc=null, activeId=null;
 function pinClass(id){
   var g=groupOf(id), s=SMAP[stageOf(id)];
