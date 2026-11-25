@@ -1,0 +1,885 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#1f7a8c">
+<title>保育園アプローチマップ｜世田谷・杉並</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" referrerpolicy="no-referrer">
+<style>
+  :root{
+    --bg:#f3f6f7; --panel:#ffffff; --ink:#1f2a30; --sub:#6b7880; --line:#e1e7ea; --soft:#f2f6f7;
+    --brand:#1f7a8c; --brand-d:#155866;
+    --c-todo:#8f989f; --c-reco:#1ea7e1; --c-prog:#f08a24; --c-prog-d:#c9650c; --c-ng:#3d4449;
+    --shadow:0 6px 24px rgba(20,40,50,.14);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;font-family:"Hiragino Kaku Gothic ProN","Yu Gothic",Meiryo,sans-serif;color:var(--ink);background:var(--bg);-webkit-text-size-adjust:100%}
+  button{font-family:inherit;cursor:pointer;color:inherit}
+  input,select,textarea{font-family:inherit;font-size:15px}
+  .app{display:flex;height:100vh;height:100dvh;overflow:hidden}
+
+  /* ===== 左パネル（スマホではボトムシート） ===== */
+  .side{width:390px;min-width:390px;background:var(--panel);display:flex;flex-direction:column;border-right:1px solid var(--line);z-index:1200}
+  .head{padding:14px 16px 10px;border-bottom:1px solid var(--line)}
+  .brand{display:flex;align-items:center;gap:9px}
+  .brand .logo{font-size:24px;line-height:1}
+  .brand h1{font-size:16px;margin:0;letter-spacing:.02em}
+  .brand .sub{font-size:11px;color:var(--sub);margin-top:2px}
+  .hbtn{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:12px;color:var(--sub);padding:5px 10px;white-space:nowrap}
+  .hbtn + .hbtn{margin-left:0}
+
+  /* 進捗（数字） */
+  .prog{margin-top:10px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer}
+  .prog .top{display:flex;align-items:baseline;gap:6px}
+  .prog .big{font-size:24px;font-weight:800;color:var(--c-prog-d);line-height:1}
+  .prog .of{font-size:12px;color:var(--sub)}
+  .prog .pct{margin-left:auto;font-size:13px;font-weight:700;color:var(--brand-d)}
+  .sbar{display:flex;height:8px;border-radius:5px;overflow:hidden;background:#e5eaec;margin-top:7px}
+  .sbar i{display:block;height:100%}
+  .prog .nums{display:flex;flex-wrap:wrap;gap:4px 10px;margin-top:7px;font-size:11.5px;color:var(--sub)}
+  .prog .nums b{color:var(--ink)}
+  .prog .more{font-size:11px;color:var(--brand);margin-top:5px}
+
+  .searchbar{margin-top:10px;display:flex;align-items:center;gap:8px;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+  .searchbar .ic{font-size:15px}
+  .searchbar .txt{flex:1;font-size:13px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .searchbar .txt.on{color:var(--ink);font-weight:700}
+  .searchbar .fcount{background:var(--brand);color:#fff;border-radius:10px;font-size:11px;padding:1px 7px;display:none}
+  .searchbar .clr{display:none;border:none;background:#eee;border-radius:50%;width:22px;height:22px;line-height:20px;text-align:center;color:#777;font-size:13px;padding:0}
+
+  .tabs{display:flex;gap:6px;padding:10px 16px 0}
+  .tabs button{flex:1;border:1px solid var(--line);background:#fff;border-radius:10px 10px 0 0;padding:9px 4px;font-size:12.5px;color:var(--sub);font-weight:700;border-bottom:none}
+  .tabs button.on{color:var(--brand-d);background:var(--panel);box-shadow:inset 0 -3px 0 var(--brand)}
+  .tabs button .n{font-weight:400;font-size:11px;margin-left:3px}
+
+  .list{flex:1;overflow:auto;padding:8px 12px 24px}
+  .note{font-size:11.5px;color:var(--sub);background:var(--soft);border:1px dashed #d3dde1;border-radius:8px;padding:8px 10px;margin:6px 2px 10px;line-height:1.55}
+  .note b{color:var(--brand-d)}
+  .card{background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px;display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+  .card:hover{border-color:#c6d3d8}
+  .card.active{border-color:var(--brand);box-shadow:0 2px 12px rgba(31,122,140,.18)}
+  .cdot{flex:none;width:26px;height:26px;border-radius:50%;margin-top:1px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff}
+  .cmain{flex:1;min-width:0}
+  .cname{font-size:14px;font-weight:700;line-height:1.35}
+  .cmeta{font-size:11.5px;color:var(--sub);margin-top:3px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .chip{background:#eef3f5;border-radius:5px;padding:1px 6px;color:#4f5d64}
+  .stg{border-radius:5px;padding:1px 7px;color:#fff;font-weight:700}
+  .prio{border-radius:5px;padding:1px 6px;font-weight:700;color:#0b6c96;background:#d8f1fc}
+  .ctel{flex:none;align-self:center;border:1px solid #cfe3e8;background:#f2fafb;border-radius:10px;width:42px;height:42px;font-size:18px;display:flex;align-items:center;justify-content:center;text-decoration:none}
+  .moreBtn{display:block;width:100%;border:1px solid var(--line);background:#fff;border-radius:10px;padding:11px;font-size:13px;color:var(--brand-d);margin:4px 0 10px}
+
+  /* ===== 地図 ===== */
+  .mapwrap{flex:1;position:relative}
+  #map{position:absolute;inset:0;background:#e9eef0}
+  .pin{width:100%;height:100%;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:800;color:#fff;font-size:11px;border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.35);transition:transform .12s}
+  .pin.sel{transform:scale(1.45);box-shadow:0 0 0 3px #fff,0 0 0 6px var(--brand)}
+  .p-todo{background:rgba(143,152,159,.5);border-color:rgba(255,255,255,.8)}
+  .p-reco1{background:rgba(30,167,225,.42)}
+  .p-reco2{background:rgba(30,167,225,.62)}
+  .p-reco3{background:rgba(30,167,225,.85)}
+  .p-prog{background:var(--c-prog)}
+  .p-prog.deep{background:var(--c-prog-d)}
+  .p-ng{background:rgba(61,68,73,.55);border-color:rgba(255,255,255,.7)}
+  .legend{position:absolute;right:12px;bottom:26px;background:rgba(255,255,255,.96);border:1px solid var(--line);border-radius:12px;padding:10px 12px;font-size:12px;box-shadow:var(--shadow);z-index:800;min-width:170px}
+  .legend h4{margin:0 0 6px;font-size:12px}
+  .legend .row{display:flex;align-items:center;gap:7px;margin-top:5px;color:#47545b}
+  .legend .row i{width:16px;height:16px;border-radius:50%;flex:none;border:1.5px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.12);font-style:normal;font-size:9px;color:#fff;font-weight:800;display:flex;align-items:center;justify-content:center}
+  .fab{position:absolute;z-index:801;background:#fff;border:1px solid var(--line);border-radius:50%;width:44px;height:44px;box-shadow:var(--shadow);font-size:18px;display:flex;align-items:center;justify-content:center}
+  .fab.on{background:var(--brand);color:#fff}
+  #fabLoc{right:12px;top:12px}
+  #legToggle{right:12px;top:64px;display:none}
+  .umk{width:18px;height:18px;border-radius:50%;background:#2a7de1;border:3px solid #fff;box-shadow:0 0 0 2px rgba(42,125,225,.35),0 1px 4px rgba(0,0,0,.3)}
+
+  /* ===== 詳細 ===== */
+  .detail{position:absolute;top:0;right:0;width:420px;max-width:48%;height:100%;background:var(--panel);box-shadow:-8px 0 24px rgba(0,0,0,.12);transform:translateX(105%);visibility:hidden;pointer-events:none;transition:transform .24s cubic-bezier(.3,.7,.3,1),visibility 0s .24s;z-index:1300;display:flex;flex-direction:column}
+  .detail.open{transform:translateX(0);visibility:visible;pointer-events:auto;transition:transform .24s cubic-bezier(.3,.7,.3,1),visibility 0s 0s}
+  .dhead{padding:14px 16px 12px;border-bottom:1px solid var(--line);display:flex;align-items:flex-start;gap:10px}
+  .dhead .dclose{margin-left:auto;border:none;background:#eef3f5;border-radius:50%;width:36px;height:36px;font-size:18px;color:#56656c;flex:none}
+  .dtitle{font-size:18px;font-weight:800;line-height:1.3}
+  .dcat{font-size:12px;color:var(--sub);margin-top:4px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+  .dbody{flex:1;overflow:auto;padding:14px 16px 40px}
+  .block{margin-top:16px}
+  .block:first-child{margin-top:0}
+  .block h3{font-size:12.5px;color:var(--brand-d);margin:0 0 8px;letter-spacing:.03em}
+  .acts{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .abtn{display:flex;align-items:center;justify-content:center;gap:6px;text-align:center;border-radius:12px;padding:13px 8px;font-weight:700;font-size:14.5px;text-decoration:none;border:1px solid var(--brand);color:var(--brand-d);background:#fff;min-height:50px}
+  .abtn.tel{background:var(--brand);color:#fff;grid-column:1 / -1;font-size:17px;min-height:56px}
+  .abtn.dis{opacity:.45;pointer-events:none}
+  .busy{font-size:12px;line-height:1.55;border-radius:10px;padding:8px 10px;margin-top:8px}
+  .busy.warn{background:#fff3e6;border:1px solid #f6d2ae;color:#8a4b0f}
+  .busy.ok{background:#eaf7ef;border:1px solid #c5e8d2;color:#256b43}
+  .kv{font-size:13.5px;line-height:1.65;margin:0}
+  .kv dt{color:var(--sub);font-size:11.5px;margin-top:7px}
+  .kv dd{margin:0}
+  .kv a{color:#1f6db5}
+  .warn2{color:#8a6a12;background:#fbf4dd;border-radius:6px;padding:4px 8px;font-size:12px;display:inline-block}
+
+  /* ステッパー */
+  .stepper{display:flex;flex-direction:column;gap:5px}
+  .step{display:flex;align-items:center;gap:10px;border:1px solid var(--line);background:#fff;border-radius:11px;padding:9px 11px;text-align:left;font-size:14px;min-height:46px}
+  .step .num{flex:none;width:26px;height:26px;border-radius:50%;background:#eef2f4;color:#6b7880;font-weight:800;font-size:12px;display:flex;align-items:center;justify-content:center}
+  .step.done{background:#fff8f1;border-color:#f6d9bd}
+  .step.done .num{background:#f6c89b;color:#fff}
+  .step.cur{background:var(--c-prog);border-color:var(--c-prog);color:#fff;font-weight:800}
+  .step.cur .num{background:#fff;color:var(--c-prog-d)}
+  .step.ngs{margin-top:4px;border-style:dashed;color:#4e575c}
+  .step.ngs.cur{background:var(--c-ng);border-color:var(--c-ng);color:#fff;border-style:solid}
+  .step.ngs.cur .num{color:var(--c-ng)}
+  .step.todo.cur{background:#8f989f;border-color:#8f989f}
+  .step.todo.cur .num{color:#6b7880}
+  .seg{display:flex;border:1px solid var(--line);border-radius:11px;overflow:hidden}
+  .seg button{flex:1;border:none;background:#fff;padding:11px 4px;font-size:14px;border-right:1px solid var(--line);min-height:46px}
+  .seg button:last-child{border-right:none}
+  .seg button.on{background:var(--c-reco);color:#fff;font-weight:800}
+  .seg button.on[data-v=""]{background:#8f989f}
+  .quick{display:flex;flex-wrap:wrap;gap:6px}
+  .quick button{border:1px solid var(--line);background:#fff;border-radius:20px;padding:9px 13px;font-size:13px;min-height:40px}
+  .quick button:active{background:var(--soft)}
+  .field{margin-top:10px}
+  .field label{display:block;font-size:12px;color:var(--sub);margin-bottom:4px}
+  .field input,.field textarea,.field select{width:100%;border:1px solid var(--line);border-radius:10px;padding:10px 11px;background:#fff;font-size:16px}
+  .field textarea{min-height:90px;resize:vertical;line-height:1.55}
+  .f2{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+  .f2 .field{margin-top:10px}
+  .log{list-style:none;margin:0;padding:0;font-size:12.5px}
+  .log li{border-left:3px solid #f3c79c;padding:4px 0 4px 9px;margin-bottom:5px;line-height:1.5}
+  .log li .t{color:var(--sub);font-size:11px;display:block}
+  .log li button{border:none;background:none;color:#b0b7bb;font-size:12px;padding:0 4px;float:right}
+  .saved{font-size:11.5px;color:var(--sub);margin-top:8px}
+
+  /* ===== モーダル ===== */
+  .mask{position:fixed;inset:0;background:rgba(20,30,36,.45);z-index:2000;display:none;align-items:center;justify-content:center;padding:16px}
+  .mask.open{display:flex}
+  .modal{background:var(--panel);border-radius:18px;width:100%;max-width:500px;max-height:90vh;max-height:90dvh;overflow:auto;box-shadow:var(--shadow);display:flex;flex-direction:column}
+  .mhead{padding:14px 18px;border-bottom:1px solid var(--line);display:flex;align-items:center;position:sticky;top:0;background:var(--panel);z-index:2}
+  .mhead h2{font-size:16px;margin:0}
+  .mhead .x{margin-left:auto;border:none;background:#eef3f5;border-radius:50%;width:36px;height:36px;font-size:17px;color:#56656c}
+  .mbody{padding:14px 18px;flex:1}
+  .fgroup{margin-bottom:16px}
+  .fgroup > label{font-size:12.5px;font-weight:700;display:block;margin-bottom:7px}
+  .tinput{width:100%;border:1px solid var(--line);border-radius:11px;padding:12px 13px;font-size:16px;background:#fff}
+  .chips{display:flex;flex-wrap:wrap;gap:7px}
+  .chipbtn{border:1px solid var(--line);background:#fff;border-radius:20px;padding:8px 12px;font-size:13px;color:#4f5d64;min-height:38px}
+  .chipbtn .c{font-size:11px;color:var(--sub);margin-left:3px}
+  .chipbtn.on{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .chipbtn.on .c{color:#d8eef2}
+  .suggest{margin-top:6px;border:1px solid var(--line);border-radius:11px;background:#fff;display:none;max-height:240px;overflow-y:auto}
+  .suggest.on{display:block}
+  .srow{display:flex;align-items:center;gap:9px;padding:10px 12px;border-bottom:1px solid #eef2f4;cursor:pointer}
+  .srow:last-child{border-bottom:none}
+  .srow .tag{flex:none;font-size:10.5px;font-weight:700;color:#fff;border-radius:6px;padding:2px 7px;background:#6b7a90}
+  .srow .tag.f{background:var(--brand)}
+  .srow .nm{flex:1;font-size:14px}
+  .srow .ct{flex:none;font-size:11px;color:var(--sub)}
+  .mfoot{position:sticky;bottom:0;background:var(--panel);padding:12px 18px;border-top:1px solid var(--line);display:flex;gap:10px}
+  .mfoot .reset{border:1px solid var(--line);background:#fff;border-radius:11px;padding:12px 16px;font-size:13px;color:var(--sub)}
+  .mfoot .go{flex:1;border:none;background:var(--brand);color:#fff;border-radius:11px;padding:13px;font-size:15px;font-weight:700}
+  .statline{display:flex;align-items:center;gap:8px;font-size:12.5px;margin:6px 0}
+  .statline .lab{width:112px;flex:none;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .statline .sbar{flex:1;margin-top:0;height:10px}
+  .statline .val{width:128px;flex:none;text-align:right;color:var(--sub);font-size:12px;white-space:nowrap}
+  .statline .val b{color:var(--ink)}
+  .statline.click{cursor:pointer}
+  .bignums{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+  .bignums div{background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 6px;text-align:center}
+  .bignums b{display:block;font-size:22px;color:var(--c-prog-d)}
+  .bignums span{font-size:11px;color:var(--sub)}
+  .info p{font-size:13px;line-height:1.7;color:#3c484e;margin:6px 0}
+  .info h3{font-size:13px;margin:16px 0 4px;color:var(--brand-d)}
+  .info a{color:#1f6db5;word-break:break-all}
+  .btnrow{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+  .btnrow button,.btnrow label{border:1px solid var(--brand);background:#fff;color:var(--brand-d);border-radius:10px;padding:10px 12px;font-size:13px;font-weight:700;cursor:pointer}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(20px);background:rgba(28,38,44,.92);color:#fff;padding:10px 16px;border-radius:12px;font-size:13.5px;z-index:3000;opacity:0;pointer-events:none;transition:.2s;max-width:90vw;text-align:center}
+  .toast.on{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  /* ===== スマホ ===== */
+  .sheetHandle{display:none}
+  @media (max-width:820px){
+    .app{flex-direction:column}
+    .side{width:100%;min-width:0;position:fixed;left:0;right:0;bottom:0;top:auto;height:46vh;display:block;overflow-y:auto;overscroll-behavior:contain;border-right:none;border-top:1px solid var(--line);border-radius:18px 18px 0 0;box-shadow:0 -6px 24px rgba(0,0,0,.14);padding-bottom:env(safe-area-inset-bottom)}
+    .mapwrap{position:fixed;inset:0}
+    .sheetHandle{display:block;padding:8px 0 3px;text-align:center;touch-action:none;cursor:grab;position:sticky;top:0;z-index:9;background:var(--panel);border-radius:18px 18px 0 0}
+    .sheetHandle .grip{display:inline-block;width:44px;height:5px;border-radius:3px;background:#cfd8dc}
+    .head{display:contents}
+    .brand{position:sticky;top:var(--stH,24px);z-index:8;background:var(--panel);margin:0;padding:2px 14px 8px;border-bottom:1px solid var(--line)}
+    .brand .sub{display:none}
+    .brand .logo{font-size:20px}
+    .brand h1{font-size:15px}
+    .headExtra{padding:8px 14px 2px}
+    .prog{margin-top:0}
+    .tabs{position:sticky;top:var(--stB,64px);z-index:8;background:var(--panel);margin:0;padding:8px 12px 6px}
+    .list{overflow:visible;padding:8px 10px 30px}
+    #legToggle{display:flex}
+    .legend{display:none;top:116px;bottom:auto}
+    .legend.open{display:block}
+    .detail{position:fixed;inset:0;width:100%;max-width:100%;z-index:1600;transform:translateY(100%);transition:transform .24s,visibility 0s .24s;padding-bottom:env(safe-area-inset-bottom)}
+    .detail.open{transform:translateY(0)}
+    body.detail-open .side{visibility:hidden;pointer-events:none}
+    body.detail-open .fab{display:none}
+    .hbtn{padding:5px 9px}
+    .statline .lab{width:88px}
+    .statline .val{width:112px;font-size:11.5px}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" id="side">
+    <div class="sheetHandle" id="sheetHandle"><span class="grip"></span></div>
+    <div class="head">
+      <div class="brand">
+        <span class="logo">🏫</span>
+        <div>
+          <h1>保育園アプローチマップ</h1>
+          <div class="sub">世田谷区・杉並区｜テレアポ〜モニター獲得の進捗</div>
+        </div>
+        <button class="hbtn" id="infoBtn" title="使い方・記録の保存">ⓘ</button>
+      </div>
+      <div class="headExtra">
+        <div class="prog" id="progBox" title="タップで内訳"></div>
+        <div class="searchbar" id="searchBar">
+          <span class="ic">🔍</span>
+          <span class="txt" id="searchTxt">名前・町名・状態でしぼり込む</span>
+          <span class="fcount" id="fcount"></span>
+          <button class="clr" id="searchClr" aria-label="条件をクリア">×</button>
+        </div>
+      </div>
+    </div>
+    <div class="tabs">
+      <button id="tab-next" data-tab="next">次に着手<span class="n" id="n-next"></span></button>
+      <button id="tab-prog" data-tab="prog">進行中<span class="n" id="n-prog"></span></button>
+      <button id="tab-all" data-tab="all">すべて<span class="n" id="n-all"></span></button>
+    </div>
+    <div class="list" id="list"></div>
+  </aside>
+
+  <div class="mapwrap">
+    <div id="map"></div>
+    <button class="fab" id="fabLoc" title="現在地">📍</button>
+    <button class="fab" id="legToggle" title="色の見方">🎨</button>
+    <div class="legend" id="legend">
+      <h4>ピンの色</h4>
+      <div class="row"><i style="background:var(--c-prog)">3</i>関係が進行中（数字＝段階）</div>
+      <div class="row"><i style="background:rgba(30,167,225,.85)"></i>次に着手：推奨 高</div>
+      <div class="row"><i style="background:rgba(30,167,225,.62)"></i>推奨 中</div>
+      <div class="row"><i style="background:rgba(30,167,225,.42)"></i>推奨 低</div>
+      <div class="row"><i style="background:rgba(143,152,159,.5)"></i>未着手</div>
+      <div class="row"><i style="background:rgba(61,68,73,.55)"></i>連絡済み・ダメだった</div>
+    </div>
+  </div>
+
+  <aside class="detail" id="detail">
+    <div class="dhead">
+      <div style="min-width:0">
+        <div class="dtitle" id="dTitle"></div>
+        <div class="dcat" id="dCat"></div>
+      </div>
+      <button class="dclose" id="dClose" aria-label="閉じる">×</button>
+    </div>
+    <div class="dbody" id="dBody"></div>
+  </aside>
+</div>
+
+<!-- しぼり込み -->
+<div class="mask" id="fMask">
+  <div class="modal">
+    <div class="mhead"><h2>しぼり込み</h2><button class="x" data-close="fMask">×</button></div>
+    <div class="mbody">
+      <div class="fgroup">
+        <label>キーワード（施設名・町名・住所）</label>
+        <input class="tinput" id="qInput" type="search" placeholder="例：八幡山、ピノキオ、阿佐谷" autocomplete="off">
+        <div class="suggest" id="qSuggest"></div>
+      </div>
+      <div class="fgroup"><label>区</label><div class="chips" id="fc-ku"></div></div>
+      <div class="fgroup"><label>世田谷区の地域</label><div class="chips" id="fc-region"></div></div>
+      <div class="fgroup"><label>状態</label><div class="chips" id="fc-group"></div></div>
+      <div class="fgroup"><label>段階</label><div class="chips" id="fc-stage"></div></div>
+      <div class="fgroup"><label>推奨度</label><div class="chips" id="fc-prio"></div></div>
+      <div class="fgroup"><label>種別</label><div class="chips" id="fc-kind"></div></div>
+      <div class="fgroup"><label>現在地からの距離（📍で現在地を取得）</label><div class="chips" id="fc-dist"></div></div>
+      <div class="fgroup"><label>その他</label><div class="chips" id="fc-etc"></div></div>
+    </div>
+    <div class="mfoot">
+      <button class="reset" id="fReset">クリア</button>
+      <button class="go" id="fGo">この条件で見る</button>
+    </div>
+  </div>
+</div>
+
+<!-- 進捗の内訳 -->
+<div class="mask" id="sMask">
+  <div class="modal">
+    <div class="mhead"><h2>進捗の内訳</h2><button class="x" data-close="sMask">×</button></div>
+    <div class="mbody" id="sBody"></div>
+  </div>
+</div>
+
+<!-- 使い方・保存 -->
+<div class="mask" id="iMask">
+  <div class="modal info">
+    <div class="mhead"><h2>使い方・記録の保存</h2><button class="x" data-close="iMask">×</button></div>
+    <div class="mbody" id="iBody"></div>
+  </div>
+</div>
+<input type="file" id="importFile" accept=".json,application/json" style="display:none">
+<div class="toast" id="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js" referrerpolicy="no-referrer"></script>
+<script src="data.js"></script>
+<script>
+(function(){
+"use strict";
+var D=window.HOIKU_DATA, F=D.facilities, META=D.meta;
+var $=function(id){return document.getElementById(id);};
+function esc(s){return (s==null?"":String(s)).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");}
+
+/* ========== 段階 ========== */
+var STAGES=[
+  {id:"todo",      label:"未着手",               short:"未着手", step:0},
+  {id:"tel",       label:"テレアポ",             short:"テレアポ", step:1},
+  {id:"fax",       label:"FAX・メール",          short:"FAX・メール", step:2},
+  {id:"sched",     label:"日程調整",             short:"日程調整", step:3},
+  {id:"interview", label:"インタビュー",         short:"インタビュー", step:4},
+  {id:"survey",    label:"アンケート",           short:"アンケート", step:5},
+  {id:"ongoing",   label:"継続的関係（モニター獲得）", short:"継続・モニター", step:6},
+  {id:"ng",        label:"連絡済み・ダメだった",  short:"ダメだった", step:-1}
+];
+var MAXSTEP=6, SMAP={}; STAGES.forEach(function(s){SMAP[s.id]=s;});
+var PIPE=STAGES.filter(function(s){return s.step>=1;});
+var STAGE_COLOR=function(s){ if(s.id==="ng")return "#3d4449"; if(s.id==="todo")return "#8f989f"; return s.step>=5?"#c9650c":"#f08a24"; };
+var PRIO={"3":"高","2":"中","1":"低"};
+
+/* ========== 記録（この端末のブラウザに保存） ========== */
+var LSKEY="hoiku_approach_records_v1", REC={};
+try{ REC=JSON.parse(localStorage.getItem(LSKEY)||"{}")||{}; }catch(e){ REC={}; }
+function saveREC(){ try{ localStorage.setItem(LSKEY, JSON.stringify(REC)); return true; }catch(e){ toast("保存できませんでした（ブラウザの設定をご確認ください）"); return false; } }
+var FMAP={}; F.forEach(function(f){FMAP[f.id]=f;});
+function recOf(id){ var r=REC[id]; if(r) return r; var f=FMAP[id]; return (f&&f.seed)?f.seed:{status:"todo"}; }
+function stageOf(id){ var s=recOf(id).status; return SMAP[s]?s:"todo"; }
+function prioOf(id){ return String(recOf(id).prio||""); }
+function telOf(f){ return recOf(f.id).tel || f.tel || ""; }
+// 表示グループ： prog=進行中 / reco=推奨（未着手＋推奨度あり） / todo=未着手 / ng=ダメだった
+function groupOf(id){ var s=stageOf(id); if(s==="ng")return "ng"; if(s!=="todo")return "prog"; return prioOf(id)?"reco":"todo"; }
+function now(){ var d=new Date(); return d.getFullYear()+"/"+(d.getMonth()+1)+"/"+d.getDate()+" "+("0"+d.getHours()).slice(-2)+":"+("0"+d.getMinutes()).slice(-2); }
+function today(){ var d=new Date(); return d.getFullYear()+"-"+("0"+(d.getMonth()+1)).slice(-2)+"-"+("0"+d.getDate()).slice(-2); }
+function editRec(id, fn){
+  var r=REC[id] ? REC[id] : JSON.parse(JSON.stringify(recOf(id)));
+  fn(r);
+  r.updatedAt=now(); r.ts=Date.now();
+  REC[id]=r; saveREC();
+  refreshOne(id);
+  return r;
+}
+
+/* ========== 地図 ========== */
+var map=L.map('map',{zoomControl:true}).setView([35.672,139.630],13);
+map.zoomControl.setPosition('bottomleft');
+L.tileLayer('https://cyberjapandata.gsi.go.jp/xyz/pale/{z}/{x}/{y}.png',{maxZoom:18,
+  attribution:"<a href='https://maps.gsi.go.jp/development/ichiran.html' target='_blank' rel='noopener'>地理院タイル</a>"}).addTo(map);
+var markers={}, layer=L.layerGroup().addTo(map), userMarker=null, userLoc=null, activeId=null;
+function pinClass(id){
+  var g=groupOf(id), s=SMAP[stageOf(id)];
+  if(g==="prog") return "p-prog"+(s.step>=5?" deep":"");
+  if(g==="reco") return "p-reco"+prioOf(id);
+  return "p-"+g;
+}
+function pinSize(id){ var g=groupOf(id); if(g==="prog")return 24; if(g==="reco")return prioOf(id)==="3"?22:(prioOf(id)==="2"?19:17); return 14; }
+function iconFor(id){
+  var g=groupOf(id), s=SMAP[stageOf(id)], sz=pinSize(id);
+  var txt=g==="prog"?s.step:(g==="reco"?PRIO[prioOf(id)]:"");
+  return L.divIcon({className:"",iconSize:[sz,sz],iconAnchor:[sz/2,sz/2],
+    html:'<div class="pin '+pinClass(id)+(id===activeId?' sel':'')+'" style="font-size:'+(sz>20?11:9)+'px">'+txt+'</div>'});
+}
+function zOf(id){ var g=groupOf(id); return g==="prog"?900:(g==="reco"?600+(+prioOf(id))*50:(g==="todo"?200:0)); }
+F.forEach(function(f){
+  var m=L.marker([f.lat,f.lng],{icon:iconFor(f.id),zIndexOffset:zOf(f.id),keyboard:false,title:f.name});
+  m.on('click',function(){ openDetail(f.id,false); });
+  markers[f.id]=m;
+});
+
+/* ========== 状態・絞り込み ========== */
+var KINDS=[]; F.forEach(function(f){ if(f.kind && KINDS.indexOf(f.kind)<0) KINDS.push(f.kind); });
+var KIND_ORDER=["区立","私立","小規模","認定こども園","家庭的保育","事業所内"];
+KINDS.sort(function(a,b){return (KIND_ORDER.indexOf(a)+99)%99-(KIND_ORDER.indexOf(b)+99)%99;});
+var REGIONS=["世田谷","北沢","玉川","砧","烏山"];
+var TOWN_COUNT={}; F.forEach(function(f){ if(f.town) TOWN_COUNT[f.town]=(TOWN_COUNT[f.town]||0)+1; });
+var TOWNS=Object.keys(TOWN_COUNT).sort(function(a,b){return TOWN_COUNT[b]-TOWN_COUNT[a];});
+var state={tab:"next", q:"", ku:{}, region:{}, group:{}, stage:{}, prio:{}, kind:{}, dist:0, telOnly:false, dueOnly:false};
+var SHOW_N=80, shown=SHOW_N;
+function setSize(o){return Object.keys(o).filter(function(k){return o[k];}).length;}
+function passFilter(f){
+  var r=recOf(f.id);
+  if(setSize(state.ku) && !state.ku[f.ku]) return false;
+  if(setSize(state.region) && !state.region[f.region]) return false;
+  if(setSize(state.group) && !state.group[groupOf(f.id)]) return false;
+  if(setSize(state.stage) && !state.stage[stageOf(f.id)]) return false;
+  if(setSize(state.prio) && !state.prio[prioOf(f.id)||"0"]) return false;
+  if(setSize(state.kind) && !state.kind[f.kind]) return false;
+  if(state.telOnly && !telOf(f)) return false;
+  if(state.dueOnly && !(r.nextDate && r.nextDate<=today())) return false;
+  if(state.dist && userLoc && distM(userLoc,f)>state.dist) return false;
+  if(state.q){
+    var q=state.q.toLowerCase();
+    var hay=(f.name+" "+f.addr+" "+(f.town||"")+" "+(r.memo||"")+" "+(r.staff||"")).toLowerCase();
+    if(hay.indexOf(q)<0) return false;
+  }
+  return true;
+}
+function filterCount(){ return (state.q?1:0)+setSize(state.ku)+setSize(state.region)+setSize(state.group)+setSize(state.stage)+setSize(state.prio)+setSize(state.kind)+(state.dist?1:0)+(state.telOnly?1:0)+(state.dueOnly?1:0); }
+function distM(a,b){ var R=6371000,t=Math.PI/180,dLat=(b.lat-a.lat)*t,dLng=(b.lng-a.lng)*t; var h=Math.sin(dLat/2)*Math.sin(dLat/2)+Math.cos(a.lat*t)*Math.cos(b.lat*t)*Math.sin(dLng/2)*Math.sin(dLng/2); return 2*R*Math.asin(Math.sqrt(h)); }
+function fmtDist(m){ return m<1000?(Math.round(m/10)*10)+"m":(m/1000).toFixed(1)+"km"; }
+
+/* ========== 描画 ========== */
+function stageChip(id){
+  var s=SMAP[stageOf(id)];
+  if(s.id==="todo") return '<span class="stg" style="background:#8f989f">未着手</span>';
+  if(s.id==="ng") return '<span class="stg" style="background:#3d4449">ダメだった</span>';
+  return '<span class="stg" style="background:'+STAGE_COLOR(s)+'">'+s.step+'/'+MAXSTEP+' '+esc(s.short)+'</span>';
+}
+function prioChip(id){ var p=prioOf(id); return p?'<span class="prio">推奨 '+PRIO[p]+'</span>':''; }
+function dotHTML(id){
+  var g=groupOf(id), s=SMAP[stageOf(id)], bg;
+  if(g==="prog") bg=STAGE_COLOR(s); else if(g==="reco") bg="rgba(30,167,225,"+({"1":.5,"2":.7,"3":.95})[prioOf(id)]+")"; else if(g==="ng") bg="rgba(61,68,73,.7)"; else bg="rgba(143,152,159,.6)";
+  var t=g==="prog"?s.step:(g==="reco"?PRIO[prioOf(id)]:(g==="ng"?"×":""));
+  return '<span class="cdot" style="background:'+bg+'">'+t+'</span>';
+}
+function cardHTML(f){
+  var r=recOf(f.id), tel=telOf(f);
+  var meta='<span class="chip">'+esc(f.kind||"")+'</span><span>📍'+esc(f.ku.replace("区",""))+(f.region?"・"+esc(f.region):"")+" "+esc(f.town||"")+'</span>';
+  if(userLoc) meta+='<span>'+fmtDist(distM(userLoc,f))+'</span>';
+  var sub='';
+  if(r.nextDate) sub+='<span style="color:'+(r.nextDate<=today()?'#c0392b':'var(--sub)')+'">⏰ 次回 '+esc(r.nextDate.slice(5).replace("-","/"))+'</span>';
+  return '<div class="card'+(f.id===activeId?' active':'')+'" data-id="'+f.id+'">'+dotHTML(f.id)+
+    '<div class="cmain"><div class="cname">'+esc(f.name)+'</div><div class="cmeta">'+stageChip(f.id)+prioChip(f.id)+meta+sub+'</div></div>'+
+    (tel?'<a class="ctel" href="tel:'+tel.replace(/[^0-9]/g,"")+'" data-tel="'+f.id+'" title="電話をかける">📞</a>':'')+'</div>';
+}
+function sortList(arr){
+  var gOrd={prog:0,reco:1,todo:2,ng:3};
+  arr.sort(function(a,b){
+    if(state.tab==="next"){ var d=(+prioOf(b.id))-(+prioOf(a.id)); if(d) return d; }
+    if(state.tab==="prog"){
+      var ra=recOf(a.id), rb=recOf(b.id);
+      var na=ra.nextDate||"9999", nb=rb.nextDate||"9999"; if(na!==nb) return na<nb?-1:1;
+      var sd=SMAP[stageOf(b.id)].step-SMAP[stageOf(a.id)].step; if(sd) return sd;
+    }
+    if(state.tab==="all"){ var g=gOrd[groupOf(a.id)]-gOrd[groupOf(b.id)]; if(g) return g; if(groupOf(a.id)==="reco"){var p=(+prioOf(b.id))-(+prioOf(a.id)); if(p) return p;} }
+    if(userLoc) return distM(userLoc,a)-distM(userLoc,b);
+    return a.addr<b.addr?-1:(a.addr>b.addr?1:0);
+  });
+  return arr;
+}
+function tabList(tab){
+  return F.filter(function(f){
+    if(!passFilter(f)) return false;
+    var g=groupOf(f.id);
+    if(tab==="next") return g==="reco";
+    if(tab==="prog") return g==="prog";
+    return true;
+  });
+}
+function render(){
+  ["next","prog","all"].forEach(function(t){ $('tab-'+t).classList.toggle('on',state.tab===t); $('n-'+t).textContent=tabList(t).length; });
+  var arr=sortList(tabList(state.tab)), list=$('list'), head="";
+  var fc=filterCount();
+  if(state.tab==="next"){
+    head='<div class="note">推奨度（<b>高・中・低</b>）をつけた<b>未着手</b>の園です。推奨度は各園の詳細で自分で設定できます。'+(arr.length?'':'<br>まだありません。「すべて」から園を開き、推奨度を選んでください。')+'</div>';
+  }else if(state.tab==="prog"){
+    head='<div class="note">テレアポ以降に進んでいる園（<b>'+arr.length+'</b>件）。次回予定日が近い順です。</div>';
+  }else{
+    head='<div class="note">'+(fc?'条件に合う':'全')+' <b>'+arr.length+'</b> 件（進行中 → 推奨 → 未着手 → ダメだった'+(userLoc?'、近い順':'')+'）</div>';
+  }
+  var html=head+arr.slice(0,shown).map(cardHTML).join('');
+  if(arr.length>shown) html+='<button class="moreBtn" id="moreBtn">さらに表示（残り '+(arr.length-shown)+' 件）</button>';
+  list.innerHTML=html;
+  var mb=$('moreBtn'); if(mb) mb.addEventListener('click',function(){ shown+=SHOW_N; render(); });
+  // 地図（絞り込みに連動）
+  layer.clearLayers();
+  F.forEach(function(f){ if(passFilter(f)) layer.addLayer(markers[f.id]); });
+  updateProgress(); updateSearchBar();
+}
+$('list').addEventListener('click',function(e){
+  var t=e.target.closest('[data-tel]');
+  if(t){ e.stopPropagation(); afterCall(t.getAttribute('data-tel')); return; }
+  var c=e.target.closest('.card'); if(c) openDetail(c.getAttribute('data-id'),true);
+});
+function refreshOne(id){
+  var m=markers[id]; if(m){ m.setIcon(iconFor(id)); m.setZIndexOffset(zOf(id)); }
+  render();
+}
+
+/* ========== 進捗（数字） ========== */
+function counts(list){ var c={}; STAGES.forEach(function(s){c[s.id]=0;}); var reco=0; list.forEach(function(f){ c[stageOf(f.id)]++; if(groupOf(f.id)==="reco") reco++; }); c.reco=reco; return c; }
+function stackBar(c,total){
+  if(!total) return '<div class="sbar"></div>';
+  var parts=PIPE.slice().reverse().map(function(s){ var n=c[s.id]; return n?'<i style="width:'+(n/total*100)+'%;background:'+STAGE_COLOR(s)+'" title="'+esc(s.label)+' '+n+'"></i>':''; }).join('');
+  parts+=c.reco?'<i style="width:'+(c.reco/total*100)+'%;background:rgba(30,167,225,.7)"></i>':'';
+  parts+=c.ng?'<i style="width:'+(c.ng/total*100)+'%;background:rgba(61,68,73,.6)"></i>':'';
+  return '<div class="sbar">'+parts+'</div>';
+}
+function reached(list,step){ return list.filter(function(f){ return SMAP[stageOf(f.id)].step>=step; }).length; }
+function updateProgress(){
+  var c=counts(F), total=F.length, started=total-c.todo;
+  var prog=PIPE.reduce(function(a,s){return a+c[s.id];},0);
+  var pct=Math.round(started/total*1000)/10;
+  $('progBox').innerHTML='<div class="top"><span class="big">'+started+'</span><span class="of">/ '+total+' 園 に連絡済み</span><span class="pct">'+pct+'%</span></div>'+
+    stackBar(c,total)+
+    '<div class="nums"><span>進行中 <b>'+prog+'</b></span><span>インタビュー以上 <b>'+reached(F,4)+'</b></span><span>モニター <b>'+c.ongoing+'</b></span><span>推奨 <b>'+c.reco+'</b></span><span>ダメ <b>'+c.ng+'</b></span></div>'+
+    '<div class="more">▶ タップで段階ごとの内訳</div>';
+}
+function renderSummary(){
+  var c=counts(F), total=F.length, started=total-c.todo;
+  var h='<div class="bignums"><div><b>'+started+'</b><span>連絡済み / '+total+'</span></div><div><b>'+reached(F,4)+'</b><span>インタビュー以上</span></div><div><b>'+c.ongoing+'</b><span>モニター獲得</span></div></div>';
+  h+='<h3 style="font-size:13px;margin:6px 0">到達した段階（その段階まで進んだ園の数）</h3>';
+  PIPE.forEach(function(s){ var r=reached(F,s.step);
+    h+='<div class="statline click" data-stage="'+s.id+'"><span class="lab">'+s.step+'. '+esc(s.short)+'</span><div class="sbar"><i style="width:'+(r/Math.max(1,started)*100)+'%;background:'+STAGE_COLOR(s)+'"></i></div><span class="val"><b>'+r+'</b> 園（今ここ '+c[s.id]+'）</span></div>'; });
+  h+='<div class="statline click" data-stage="ng"><span class="lab">× ダメだった</span><div class="sbar"><i style="width:'+(c.ng/Math.max(1,started)*100)+'%;background:#3d4449"></i></div><span class="val"><b>'+c.ng+'</b> 園</span></div>';
+  h+='<div class="statline click" data-group="reco"><span class="lab">推奨（未着手）</span><div class="sbar"><i style="width:'+(c.reco/total*100)+'%;background:rgba(30,167,225,.8)"></i></div><span class="val">高'+F.filter(function(f){return groupOf(f.id)==="reco"&&prioOf(f.id)==="3";}).length+' 中'+F.filter(function(f){return groupOf(f.id)==="reco"&&prioOf(f.id)==="2";}).length+' 低'+F.filter(function(f){return groupOf(f.id)==="reco"&&prioOf(f.id)==="1";}).length+'</span></div>';
+  h+='<h3 style="font-size:13px;margin:16px 0 6px">地域ごと（タップで絞り込み）</h3>';
+  var areas=[["杉並区",""]].concat(REGIONS.map(function(r){return ["世田谷区",r];}));
+  areas.forEach(function(a){
+    var list=F.filter(function(f){return f.ku===a[0]&&(!a[1]||f.region===a[1]);}), cc=counts(list);
+    h+='<div class="statline click" data-ku="'+a[0]+'" data-region="'+a[1]+'"><span class="lab">'+(a[1]?'世田谷・'+a[1]:'杉並区')+'</span>'+stackBar(cc,list.length)+'<span class="val"><b>'+(list.length-cc.todo)+'</b> / '+list.length+'</span></div>';
+  });
+  h+='<p style="font-size:11.5px;color:var(--sub);margin-top:14px;line-height:1.6">「連絡済み」＝未着手以外（ダメだったを含む）。数字はこの端末に保存された記録で数えています。</p>';
+  $('sBody').innerHTML=h;
+  $('sBody').querySelectorAll('.statline').forEach(function(el){ el.addEventListener('click',function(){
+    clearFilters();
+    if(el.dataset.stage){ state.stage[el.dataset.stage]=true; }
+    if(el.dataset.group){ state.group[el.dataset.group]=true; }
+    if(el.dataset.ku){ state.ku[el.dataset.ku]=true; if(el.dataset.region) state.region[el.dataset.region]=true; }
+    state.tab="all"; shown=SHOW_N; closeMask('sMask'); render(); toast("絞り込みました（🔍の×で解除）");
+  }); });
+}
+$('progBox').addEventListener('click',function(){ renderSummary(); openMask('sMask'); });
+
+/* ========== 電話の時間帯（保育園電話スクリプトより） ========== */
+function busyNote(){
+  var d=new Date(), m=d.getHours()*60+d.getMinutes(), day=d.getDay();
+  var busy=[[450,570,"登園対応"],[690,780,"昼食"],[960,1110,"降園対応"]], good=[[600,660],[810,930]];
+  if(day===0) return '<div class="busy warn">今日は日曜日です。多くの園はお休みです。</div>';
+  for(var i=0;i<busy.length;i++) if(m>=busy[i][0]&&m<busy[i][1]) return '<div class="busy warn">⚠ いまは園が忙しい時間帯です（'+busy[i][2]+'）。おすすめは <b>10:00〜11:00</b>／<b>13:30〜15:30</b>。</div>';
+  for(var j=0;j<good.length;j++) if(m>=good[j][0]&&m<good[j][1]) return '<div class="busy ok">◎ いまは電話に比較的良い時間帯です。最初に「今お時間よろしいでしょうか？」を。</div>';
+  return '<div class="busy ok" style="background:#f2f6f7;border-color:var(--line);color:var(--sub)">電話に良い時間帯：10:00〜11:00／13:30〜15:30（避ける：7:30〜9:30・11:30〜13:00・16:00〜18:30）</div>';
+}
+
+/* ========== 詳細 ========== */
+function stepperHTML(cur){
+  var cs=SMAP[cur].step, h='';
+  STAGES.forEach(function(s){
+    if(s.id==="ng") return;
+    var isc=(s.id===cur), done=(cs>0 && s.step>0 && s.step<cs);
+    h+='<button type="button" class="step'+(s.id==="todo"?' todo':'')+(isc?' cur':'')+(done?' done':'')+'" data-s="'+s.id+'"><span class="num">'+(done?'✓':s.step)+'</span>'+esc(s.label)+'</button>';
+  });
+  h+='<button type="button" class="step ngs'+(cur==="ng"?' cur':'')+'" data-s="ng"><span class="num">×</span>連絡済み・ダメだった（見送り）</button>';
+  return h;
+}
+function openDetail(id, fly){
+  var f=FMAP[id]; if(!f) return;
+  var prev=activeId; activeId=id;
+  if(prev && markers[prev]) markers[prev].setIcon(iconFor(prev));
+  markers[id].setIcon(iconFor(id));
+  var r=recOf(id), cur=stageOf(id), tel=telOf(f), p=prioOf(id);
+  $('dTitle').textContent=f.name;
+  $('dCat').innerHTML=stageChip(id)+prioChip(id)+'<span class="chip">'+esc(f.kind)+'</span><span>'+esc(f.ku)+(f.region?'・'+esc(f.region)+'地域':'')+'</span>';
+  var dest=encodeURIComponent(f.addr.replace(/\s.*$/,"")+" "+f.name);
+  var b='';
+  b+='<div class="block"><div class="acts">'+
+     (tel?'<a class="abtn tel" href="tel:'+tel.replace(/[^0-9]/g,"")+'" id="callBtn">📞 電話をかける　'+esc(tel)+'</a>':'<a class="abtn tel dis">📞 電話番号が未登録（下で入力できます）</a>')+
+     '<a class="abtn" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination='+dest+'">🧭 道順</a>'+
+     '<a class="abtn" target="_blank" rel="noopener" href="https://www.google.com/search?q='+encodeURIComponent(f.name+" "+f.ku)+'">🔎 園を検索</a>'+
+     '</div>'+(tel?busyNote():'')+'</div>';
+  b+='<div class="block"><h3>電話・連絡の結果をすぐ記録</h3><div class="quick" id="quick">'+
+     '<button data-q="noans">つながらず・不在</button><button data-q="later">後日かけ直し</button><button data-q="ok">OK → FAX・メールへ</button><button data-q="date">日程が決まった</button><button data-q="ng">断られた</button></div></div>';
+  b+='<div class="block"><h3>進行段階（タップで今の段階にする）　'+(SMAP[cur].step>0?SMAP[cur].step+' / '+MAXSTEP:'')+'</h3><div class="stepper" id="stepper">'+stepperHTML(cur)+'</div></div>';
+  b+='<div class="block"><h3>次に着手すべき推奨度（自分で設定）</h3><div class="seg" id="prioSeg">'+
+     ['','1','2','3'].map(function(v){return '<button type="button" data-v="'+v+'"'+(p===v?' class="on"':'')+'>'+(v?PRIO[v]:'なし')+'</button>';}).join('')+
+     '</div><div class="saved">未着手の園で推奨度をつけると水色のピンになり、「次に着手」タブに並びます。</div></div>';
+  b+='<div class="block"><h3>記録</h3>'+
+     '<div class="f2"><div class="field"><label>最後に連絡した日</label><input type="date" id="r_contact" value="'+esc(r.contactDate||"")+'"></div>'+
+     '<div class="field"><label>次にやる日（かけ直し等）</label><input type="date" id="r_next" value="'+esc(r.nextDate||"")+'"></div></div>'+
+     '<div class="f2"><div class="field"><label>インタビュー日</label><input type="date" id="r_visit" value="'+esc(r.visitDate||"")+'"></div>'+
+     '<div class="field"><label>先方の担当</label><input type="text" id="r_staff" placeholder="例）園長 ○○先生" value="'+esc(r.staff||"")+'"></div></div>'+
+     '<div class="f2"><div class="field"><label>電話（変更があれば）</label><input type="tel" id="r_tel" placeholder="'+esc(f.tel||"03-xxxx-xxxx")+'" value="'+esc(r.tel||"")+'"></div>'+
+     '<div class="field"><label>FAX</label><input type="tel" id="r_fax" value="'+esc(r.fax||"")+'"></div></div>'+
+     '<div class="field"><label>メール</label><input type="email" id="r_mail" value="'+esc(r.mail||"")+'"></div>'+
+     '<div class="field"><label>メモ（話した内容・断られた理由・モニター候補など）</label><textarea id="r_memo">'+esc(r.memo||"")+'</textarea></div>'+
+     '<div class="saved" id="savedNote">'+(r.updatedAt?'最終更新 '+esc(r.updatedAt):(f.seed?'PC内の資料から作った初期値です':''))+'</div></div>';
+  var log=(r.log||[]);
+  b+='<div class="block"><h3>連絡の履歴（新しい順）</h3>'+(log.length?'<ul class="log" id="logList">'+log.map(function(x,i){return '<li><button data-del="'+i+'" title="削除">✕</button><span class="t">'+esc(x.at)+'</span>'+esc(x.text)+'</li>';}).join('')+'</ul>':'<div class="saved">まだありません。上の「結果をすぐ記録」や段階の変更で自動で残ります。</div>')+'</div>';
+  b+='<div class="block"><h3>園の情報</h3><dl class="kv"><dt>住所</dt><dd>'+esc(f.addr)+'</dd>'+
+     (f.tel?'<dt>電話（区の一覧）</dt><dd>'+esc(f.tel)+'</dd>':'')+
+     (f.cap?'<dt>定員</dt><dd>'+f.cap+' 人</dd>':'')+
+     (userLoc?'<dt>現在地から</dt><dd>約 '+fmtDist(distM(userLoc,f))+'（直線）</dd>':'')+
+     (f.note?'<dt>備考</dt><dd><span class="warn2">'+esc(f.note)+'</span></dd>':'')+
+     '<dt>出典</dt><dd>'+(f.src?'<a href="'+esc(f.src)+'" target="_blank" rel="noopener">'+(f.ku==="世田谷区"?"世田谷区 認可保育園(定員数)":"杉並区 保育園一覧")+' ↗</a>':'子どもマップ')+'<br><span style="font-size:11.5px;color:var(--sub)">座標：'+esc(f.from||"")+'</span></dd></dl></div>';
+  $('dBody').innerHTML=b; $('dBody').scrollTop=0;
+  bindDetail(id);
+  $('detail').classList.add('open'); document.body.classList.add('detail-open');
+  if(fly){ map.setView([f.lat,f.lng],Math.max(map.getZoom(),15),{animate:true}); }
+  else if(window.innerWidth>820){ map.panTo([f.lat,f.lng],{animate:true}); }
+  document.querySelectorAll('.card').forEach(function(c){c.classList.toggle('active',c.getAttribute('data-id')===id);});
+}
+function addLog(r,text){ r.log=r.log||[]; r.log.unshift({at:now(),text:text}); if(r.log.length>60) r.log.length=60; }
+function bindDetail(id){
+  var f=FMAP[id];
+  $('stepper').addEventListener('click',function(e){
+    var b=e.target.closest('.step'); if(!b) return;
+    var ns=b.getAttribute('data-s'), old=stageOf(id); if(ns===old) return;
+    editRec(id,function(r){ r.status=ns; addLog(r,"段階："+SMAP[old].short+" → "+SMAP[ns].short); if(ns!=="todo"&&!r.contactDate) r.contactDate=today(); });
+    openDetail(id,false); toast("「"+SMAP[ns].label+"」にしました");
+  });
+  $('prioSeg').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(!b) return;
+    var v=b.getAttribute('data-v');
+    editRec(id,function(r){ if(v) r.prio=v; else delete r.prio; });
+    openDetail(id,false);
+    toast(v?("推奨度「"+PRIO[v]+"」にしました"+(stageOf(id)!=="todo"?"（進行中の園はオレンジのまま）":"")):"推奨度をはずしました");
+  });
+  $('quick').addEventListener('click',function(e){
+    var b=e.target.closest('button'); if(!b) return; quickResult(id,b.getAttribute('data-q'));
+  });
+  var cb=$('callBtn'); if(cb) cb.addEventListener('click',function(){ afterCall(id,true); });
+  ['r_contact','r_next','r_visit','r_staff','r_tel','r_fax','r_mail','r_memo'].forEach(function(k){
+    $(k).addEventListener('change',function(){
+      var r=editRec(id,function(r){
+        r.contactDate=$('r_contact').value; r.nextDate=$('r_next').value; r.visitDate=$('r_visit').value;
+        r.staff=$('r_staff').value.trim(); r.tel=$('r_tel').value.trim(); r.fax=$('r_fax').value.trim();
+        r.mail=$('r_mail').value.trim(); r.memo=$('r_memo').value.trim();
+      });
+      $('savedNote').textContent='保存しました　最終更新 '+r.updatedAt;
+      if(k==='r_tel') openDetail(id,false);
+    });
+  });
+  var ll=$('logList'); if(ll) ll.addEventListener('click',function(e){
+    var b=e.target.closest('[data-del]'); if(!b) return;
+    if(!confirm("この履歴を消しますか？")) return;
+    var i=+b.getAttribute('data-del'); editRec(id,function(r){ r.log.splice(i,1); }); openDetail(id,false);
+  });
+}
+function afterCall(id,inDetail){
+  // 電話アプリが開く。戻ってきたら結果を押せるように詳細を開いておく
+  editRec(id,function(r){ addLog(r,"📞 電話をかけた"); r.contactDate=today(); });
+  setTimeout(function(){ openDetail(id,!inDetail); },300);
+  toast("通話後に「結果をすぐ記録」を押してください");
+}
+function quickResult(id,q){
+  var old=stageOf(id), step=SMAP[old].step;
+  editRec(id,function(r){
+    r.contactDate=today();
+    if(q==="noans"){ addLog(r,"つながらず・不在"); }
+    else if(q==="later"){ addLog(r,"後日かけ直し"); var d=new Date(); d.setDate(d.getDate()+(d.getDay()===5?3:1)); r.nextDate=d.toISOString().slice(0,10); }
+    else if(q==="ok"){ addLog(r,"テレアポOK → FAX・メールを送る"); if(step<2) r.status="fax"; }
+    else if(q==="date"){ addLog(r,"日程が決まった"); if(step<3) r.status="sched"; }
+    else if(q==="ng"){ addLog(r,"断られた（"+SMAP[old].short+"の段階で）"); r.status="ng"; }
+    if((q==="noans"||q==="later") && old==="todo") r.status="tel";
+  });
+  openDetail(id,false);
+  var msg={noans:"不在を記録（テレアポ中）",later:"かけ直しを記録（次にやる日を翌営業日に）",ok:"FAX・メールの段階に進めました",date:"日程調整の段階に進めました",ng:"「ダメだった」にしました（暗いグレー）"}[q];
+  toast(msg);
+}
+function closeDetail(){
+  $('detail').classList.remove('open'); document.body.classList.remove('detail-open');
+  var prev=activeId; activeId=null; if(prev&&markers[prev]) markers[prev].setIcon(iconFor(prev));
+  document.querySelectorAll('.card.active').forEach(function(c){c.classList.remove('active');});
+}
+$('dClose').addEventListener('click',closeDetail);
+
+/* ========== タブ ========== */
+document.querySelectorAll('.tabs button').forEach(function(b){ b.addEventListener('click',function(){ state.tab=b.getAttribute('data-tab'); shown=SHOW_N; render(); $('list').scrollTop=0; }); });
+
+/* ========== 絞り込みモーダル ========== */
+var draft=null;
+function cloneState(){ return JSON.parse(JSON.stringify(state)); }
+function chipGroup(elId,key,items){
+  var el=$(elId);
+  el.innerHTML=items.map(function(it){ return '<button class="chipbtn'+(draft[key][it.v]?' on':'')+'" data-v="'+esc(it.v)+'">'+esc(it.l)+(it.c!=null?'<span class="c">'+it.c+'</span>':'')+'</button>'; }).join('');
+  el.onclick=function(e){ var b=e.target.closest('.chipbtn'); if(!b) return; var v=b.getAttribute('data-v'); draft[key][v]=!draft[key][v]; if(!draft[key][v]) delete draft[key][v]; b.classList.toggle('on'); };
+}
+function cnt(fn){ return F.filter(fn).length; }
+function openFilter(){
+  draft=cloneState();
+  $('qInput').value=draft.q; $('qSuggest').classList.remove('on');
+  chipGroup('fc-ku','ku',[{v:"世田谷区",l:"世田谷区",c:cnt(function(f){return f.ku==="世田谷区";})},{v:"杉並区",l:"杉並区",c:cnt(function(f){return f.ku==="杉並区";})}]);
+  chipGroup('fc-region','region',REGIONS.map(function(r){return {v:r,l:r,c:cnt(function(f){return f.region===r;})};}));
+  chipGroup('fc-group','group',[{v:"prog",l:"🟠 進行中"},{v:"reco",l:"🔵 推奨（次に着手）"},{v:"todo",l:"⚪ 未着手"},{v:"ng",l:"⚫ ダメだった"}].map(function(x){x.c=cnt(function(f){return groupOf(f.id)===x.v;});return x;}));
+  chipGroup('fc-stage','stage',STAGES.map(function(s){return {v:s.id,l:(s.step>0?s.step+". ":"")+s.short,c:cnt(function(f){return stageOf(f.id)===s.id;})};}));
+  chipGroup('fc-prio','prio',[{v:"3",l:"高"},{v:"2",l:"中"},{v:"1",l:"低"},{v:"0",l:"なし"}].map(function(x){x.c=cnt(function(f){return (prioOf(f.id)||"0")===x.v;});return x;}));
+  chipGroup('fc-kind','kind',KINDS.map(function(k){return {v:k,l:k,c:cnt(function(f){return f.kind===k;})};}));
+  var de=$('fc-dist');
+  de.innerHTML=[0,500,1000,2000,3000].map(function(v){return '<button class="chipbtn'+(draft.dist===v?' on':'')+'" data-v="'+v+'">'+(v?(v<1000?v+'m':(v/1000)+'km')+'以内':'指定なし')+'</button>';}).join('');
+  de.onclick=function(e){ var b=e.target.closest('.chipbtn'); if(!b) return; var v=+b.getAttribute('data-v');
+    if(v && !userLoc){ locate(); }
+    draft.dist=v; de.querySelectorAll('.chipbtn').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-v')===v);}); };
+  var ee=$('fc-etc');
+  ee.innerHTML='<button class="chipbtn'+(draft.telOnly?' on':'')+'" data-k="telOnly">📞 電話番号あり</button><button class="chipbtn'+(draft.dueOnly?' on':'')+'" data-k="dueOnly">⏰ 次にやる日が今日まで</button>';
+  ee.onclick=function(e){ var b=e.target.closest('.chipbtn'); if(!b) return; var k=b.getAttribute('data-k'); draft[k]=!draft[k]; b.classList.toggle('on',draft[k]); };
+  openMask('fMask');
+}
+function renderSuggest(){
+  var q=$('qInput').value.trim(), box=$('qSuggest');
+  if(!q){ box.classList.remove('on'); box.innerHTML=''; return; }
+  var ql=q.toLowerCase(), rows='';
+  TOWNS.filter(function(t){return t.toLowerCase().indexOf(ql)>=0;}).slice(0,6).forEach(function(t){ rows+='<div class="srow" data-v="'+esc(t)+'"><span class="tag">町名</span><span class="nm">'+esc(t)+'</span><span class="ct">'+TOWN_COUNT[t]+'園</span></div>'; });
+  F.filter(function(f){return f.name.toLowerCase().indexOf(ql)>=0;}).slice(0,8).forEach(function(f){ rows+='<div class="srow" data-id="'+f.id+'"><span class="tag f">園</span><span class="nm">'+esc(f.name)+'</span><span class="ct">'+esc(f.town||"")+'</span></div>'; });
+  box.innerHTML=rows||'<div class="srow"><span class="nm" style="color:var(--sub);font-size:13px">候補なし（このまま検索できます）</span></div>';
+  box.classList.add('on');
+}
+$('qInput').addEventListener('input',renderSuggest);
+$('qSuggest').addEventListener('click',function(e){
+  var r=e.target.closest('.srow'); if(!r) return;
+  if(r.dataset.id){ closeMask('fMask'); openDetail(r.dataset.id,true); return; }
+  if(r.dataset.v){ $('qInput').value=r.dataset.v; applyFilter(); }
+});
+$('qInput').addEventListener('keydown',function(e){ if(e.key==="Enter"){ e.preventDefault(); applyFilter(); } });
+function applyFilter(){ draft.q=$('qInput').value.trim(); state=draft; if(filterCount() && state.tab==="next" && !tabList("next").length) state.tab="all"; shown=SHOW_N; closeMask('fMask'); render(); }
+function clearFilters(){ state.q=""; ["ku","region","group","stage","prio","kind"].forEach(function(k){state[k]={};}); state.dist=0; state.telOnly=false; state.dueOnly=false; }
+$('fGo').addEventListener('click',applyFilter);
+$('fReset').addEventListener('click',function(){ var t=state.tab; clearFilters(); state.tab=t; openFilter(); });
+$('searchBar').addEventListener('click',openFilter);
+$('searchClr').addEventListener('click',function(e){ e.stopPropagation(); clearFilters(); shown=SHOW_N; render(); });
+function updateSearchBar(){
+  var n=filterCount(), t=$('searchTxt');
+  if(n){ var parts=[]; if(state.q) parts.push(state.q); Object.keys(state.ku).forEach(function(k){parts.push(k);}); Object.keys(state.region).forEach(function(k){parts.push(k);});
+    Object.keys(state.group).forEach(function(k){parts.push({prog:"進行中",reco:"推奨",todo:"未着手",ng:"ダメ"}[k]);}); Object.keys(state.stage).forEach(function(k){parts.push(SMAP[k].short);});
+    Object.keys(state.prio).forEach(function(k){parts.push("推奨"+(PRIO[k]||"なし"));}); Object.keys(state.kind).forEach(function(k){parts.push(k);});
+    if(state.dist) parts.push(fmtDist(state.dist)+"以内"); if(state.telOnly) parts.push("電話あり"); if(state.dueOnly) parts.push("期限");
+    t.textContent=parts.join("・")+"　"+F.filter(passFilter).length+"件"; t.classList.add('on'); $('fcount').textContent=n; $('fcount').style.display='inline-block'; $('searchClr').style.display='block'; }
+  else { t.textContent='名前・町名・状態でしぼり込む'; t.classList.remove('on'); $('fcount').style.display='none'; $('searchClr').style.display='none'; }
+}
+
+/* ========== モーダル共通 ========== */
+function openMask(id){ $(id).classList.add('open'); }
+function closeMask(id){ $(id).classList.remove('open'); }
+document.querySelectorAll('[data-close]').forEach(function(b){ b.addEventListener('click',function(){ closeMask(b.getAttribute('data-close')); }); });
+document.querySelectorAll('.mask').forEach(function(m){ m.addEventListener('click',function(e){ if(e.target===m) m.classList.remove('open'); }); });
+
+/* ========== 現在地 ========== */
+function locate(){
+  if(!navigator.geolocation){ toast("この端末では現在地を取得できません"); return; }
+  toast("現在地を取得中…");
+  navigator.geolocation.getCurrentPosition(function(pos){
+    userLoc={lat:pos.coords.latitude,lng:pos.coords.longitude};
+    if(userMarker) map.removeLayer(userMarker);
+    userMarker=L.marker([userLoc.lat,userLoc.lng],{icon:L.divIcon({className:"",html:'<div class="umk"></div>',iconSize:[18,18],iconAnchor:[9,9]}),zIndexOffset:3000,keyboard:false}).addTo(map);
+    map.setView([userLoc.lat,userLoc.lng],15,{animate:true}); $('fabLoc').classList.add('on');
+    render(); toast("現在地を表示しました（一覧は近い順）");
+  },function(err){ toast(err.code===1?"位置情報の利用を許可してください":"現在地を取得できませんでした"); },{enableHighAccuracy:true,timeout:10000,maximumAge:60000});
+}
+$('fabLoc').addEventListener('click',locate);
+$('legToggle').addEventListener('click',function(){ $('legend').classList.toggle('open'); });
+map.on('click',function(){ $('legend').classList.remove('open'); });
+
+/* ========== 使い方・バックアップ ========== */
+function fillInfo(){
+  var n=Object.keys(REC).length;
+  $('iBody').innerHTML=
+  '<p>世田谷区・杉並区の保育園 <b>'+F.length+'</b> 園（電話番号あり '+META.with_tel+' 園）を地図にしています。ピンをタップすると、電話をかけたり、進み具合を記録できます。</p>'+
+  '<h3>進み方（7段階＋ダメだった）</h3><p>0 未着手 → 1 テレアポ → 2 FAX・メール → 3 日程調整 → 4 インタビュー → 5 アンケート → 6 継続的関係（モニター獲得）。断られた園は「連絡済み・ダメだった」。</p>'+
+  '<h3>色の見方</h3><p>🟠 オレンジ＝関係が進行中（数字＝段階）／🔵 水色（半透明）＝次に着手すべき園（推奨度 高ほど濃く大きい）／⚪ グレー（半透明）＝未着手／⚫ 暗いグレー（半透明）＝連絡済み・ダメだった。</p>'+
+  '<h3>記録の保存（大事）</h3><p>記録は<b>この端末のブラウザの中</b>に保存されます（いま '+n+' 園分）。サーバーには送りません。PCとスマホは別々なので、引き継ぐときは「JSONで保存」→もう一方で「JSONを読み込む」をしてください（新しいほうの記録が残ります）。機種変更やブラウザのデータ消去に備えて、ときどきJSONかCSVで保存してください。</p>'+
+  '<div class="btnrow"><button id="expCsv">📊 CSVで保存（Excel用）</button><button id="expJson">💾 JSONで保存（バックアップ）</button><button id="impJson">📥 JSONを読み込む</button></div>'+
+  '<h3>最初から入っている記録</h3><p>PC内の資料（事業関連／04_需要調査／保育園）から、南八幡山・松沢・烏山翼・上北沢こぐま・えにっくす八幡山・ベネッセ杉並和泉の進み具合を初期値として入れています。違っていたら詳細で直してください。</p>'+
+  '<h3>データの出典</h3><p>施設・座標：MITSU 子どもマップ（child-maps）。電話番号・定員：<a href="https://www.city.setagaya.lg.jp/02243/1578.html" target="_blank" rel="noopener">世田谷区 認可保育園(定員数)</a>（5地域）、<a href="https://www.city.suginami.tokyo.jp/shisetsu/kosodate/kuritsu/index.html" target="_blank" rel="noopener">杉並区 区立保育園</a>、<a href="https://www.city.suginami.tokyo.jp/s058/1101.html" target="_blank" rel="noopener">杉並区 私立保育園一覧</a>。子どもマップにない園は国土地理院の住所検索で位置を求めました。地図：地理院タイル。データ作成日 '+esc(META.generated)+'。</p>'+
+  '<p style="color:var(--sub);font-size:12px">電話番号・園名は作成時点のものです。かける前に名前を確かめてください。</p>';
+  $('expCsv').addEventListener('click',exportCsv);
+  $('expJson').addEventListener('click',exportJson);
+  $('impJson').addEventListener('click',function(){ $('importFile').click(); });
+}
+$('infoBtn').addEventListener('click',function(){ fillInfo(); openMask('iMask'); });
+function stamp(){ var d=new Date(); return d.getFullYear()+("0"+(d.getMonth()+1)).slice(-2)+("0"+d.getDate()).slice(-2); }
+function download(name,text,type){
+  var blob=new Blob([text],{type:type}), a=document.createElement('a');
+  a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(function(){ URL.revokeObjectURL(a.href); a.remove(); },500);
+}
+function csvCell(v){ v=(v==null?"":String(v)); return /[",\n]/.test(v)?'"'+v.replace(/"/g,'""')+'"':v; }
+function exportCsv(){
+  var head=["ID","区","地域","町名","施設名","種別","住所","電話","FAX","メール","段階番号","段階","推奨度","最後に連絡した日","次にやる日","インタビュー日","先方の担当","メモ","履歴","更新日時"];
+  var rows=[head.join(",")];
+  F.forEach(function(f){ var r=recOf(f.id), s=SMAP[stageOf(f.id)];
+    rows.push([f.id,f.ku,f.region,f.town,f.name,f.kind,f.addr,telOf(f),r.fax,r.mail,s.step>=0?s.step:"×",s.label,PRIO[prioOf(f.id)]||"",r.contactDate,r.nextDate,r.visitDate,r.staff,r.memo,(r.log||[]).map(function(x){return x.at+" "+x.text;}).join(" / "),r.updatedAt].map(csvCell).join(","));
+  });
+  download("保育園アプローチ記録_"+stamp()+".csv","﻿"+rows.join("\r\n"),"text/csv;charset=utf-8"); toast("CSVを保存しました");
+}
+function exportJson(){ download("保育園アプローチ記録_"+stamp()+".json",JSON.stringify({app:"hoikuen-approach-map",version:1,exportedAt:now(),records:REC},null,1),"application/json"); toast("JSONを保存しました"); }
+$('importFile').addEventListener('change',function(){
+  var file=this.files[0]; if(!file) return; var rd=new FileReader();
+  rd.onload=function(){
+    try{
+      var j=JSON.parse(rd.result), recs=j.records||j, add=0, upd=0, keep=0;
+      Object.keys(recs).forEach(function(id){
+        if(!FMAP[id]) return; var x=recs[id], cur=REC[id];
+        if(!cur){ REC[id]=x; add++; } else if((x.ts||0)>(cur.ts||0)){ REC[id]=x; upd++; } else keep++;
+      });
+      saveREC(); F.forEach(function(f){ markers[f.id].setIcon(iconFor(f.id)); markers[f.id].setZIndexOffset(zOf(f.id)); });
+      render(); fillInfo(); toast("読み込みました：追加 "+add+"・更新 "+upd+"・こちらが新しい "+keep);
+    }catch(e){ toast("読み込めませんでした（このアプリのJSONか確認してください）"); }
+  };
+  rd.readAsText(file); this.value="";
+});
+
+function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('on');},2600); }
+
+/* ========== ボトムシート（スマホ）：神社マップと同じ操作 ========== */
+(function(){
+  var side=$('side'), handle=$('sheetHandle');
+  function snaps(){ var vh=window.innerHeight; return [vh*0.2, vh*0.46, vh*0.86]; }
+  function FULL(){ return snaps()[2]; }
+  function curH(){ return side.getBoundingClientRect().height; }
+  function setH(h){ var vh=window.innerHeight; h=Math.max(vh*0.12,Math.min(vh*0.9,h)); side.style.height=h+'px'; }
+  function nearest(h){ var sn=snaps(); return sn.reduce(function(p,c){return Math.abs(c-h)<Math.abs(p-h)?c:p;}); }
+  function animTo(h){ side.style.transition='height .2s cubic-bezier(.3,.7,.3,1)'; setH(h); setTimeout(function(){side.style.transition='';},220); }
+  function setStick(){
+    if(window.innerWidth>820) return;
+    var h=handle.offsetHeight, b=side.querySelector('.brand').offsetHeight;
+    document.documentElement.style.setProperty('--stH',h+'px'); document.documentElement.style.setProperty('--stB',(h+b)+'px');
+  }
+  var active=false, mode=null, startY=0, startH=0, moved=false, couple=false, onHandle=false, i0=0, lastY=0, lastT=0, vy=0;
+  function start(y,target){
+    active=true; mode=null; moved=false; startY=y; startH=curH(); side.style.transition='';
+    i0=snaps().indexOf(nearest(startH)); lastY=y; lastT=performance.now(); vy=0;
+    var sticky=!!(target&&target.closest&&(target.closest('#sheetHandle')||target.closest('.brand')||target.closest('.tabs')));
+    couple=!sticky; onHandle=!!(target&&target.closest&&target.closest('#sheetHandle'));
+  }
+  function move(y,ev){
+    if(!active) return;
+    var dy=y-startY, t=performance.now(), dt=t-lastT; if(dt>0) vy=(y-lastY)/dt; lastY=y; lastT=t;
+    if(mode===null){
+      if(Math.abs(dy)<3) return; moved=true;
+      if(!couple) mode='sheet';
+      else { var expandable=curH()<FULL()-2, atTop=side.scrollTop<=0;
+        if(dy<0&&expandable) mode='sheet'; else if(dy>0&&atTop) mode='sheet'; else mode='scroll'; }
+    }
+    if(mode==='sheet'){ if(ev&&ev.cancelable) ev.preventDefault(); setH(startH-dy*1.4); }
+  }
+  function end(){
+    if(!active) return; active=false;
+    if(!moved&&onHandle){ var sn=snaps(), i=sn.indexOf(nearest(curH())); animTo(sn[(i+1)%sn.length]); mode=null; return; }
+    if(mode==='sheet'){
+      var s2=snaps(), ni=s2.indexOf(nearest(curH())), dir=Math.sign(curH()-startH), disp=Math.abs(curH()-startH), fast=Math.abs(vy)>0.35;
+      if(ni===i0&&dir!==0&&(disp>8||fast)) ni=Math.max(0,Math.min(s2.length-1,i0+dir));
+      animTo(s2[ni]);
+    }
+    mode=null;
+  }
+  side.addEventListener('touchstart',function(e){ start(e.touches[0].clientY,e.target); },{passive:true});
+  side.addEventListener('touchmove',function(e){ move(e.touches[0].clientY,e); },{passive:false});
+  side.addEventListener('touchend',end); side.addEventListener('touchcancel',end);
+  handle.addEventListener('pointerdown',function(e){ if(e.pointerType==='mouse'){ start(e.clientY,handle); handle.setPointerCapture(e.pointerId); } });
+  handle.addEventListener('pointermove',function(e){ if(e.pointerType==='mouse') move(e.clientY,e); });
+  handle.addEventListener('pointerup',function(e){ if(e.pointerType==='mouse') end(); });
+  window.addEventListener('resize',function(){ if(window.innerWidth>820) side.style.height=''; setStick(); });
+  setStick();
+  // 地図を動かしたらシートを低くして地図を広く
+  map.on('dragstart',function(){ if(window.innerWidth<=820 && curH()>snaps()[1]+4) animTo(snaps()[1]); });
+})();
+
+/* ========== 起動 ========== */
+if(!tabList("next").length) state.tab = tabList("prog").length ? "prog" : "all";
+render();
+try{ if(!localStorage.getItem("hoiku_seen")){ localStorage.setItem("hoiku_seen","1"); setTimeout(function(){ toast("ピンをタップ → 電話・記録。🔍で絞り込み"); },800); } }catch(e){}
+})();
+</script>
+</body>
+</html>

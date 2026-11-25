@@ -1,0 +1,3 @@
+# 区のサイトから保存した一覧ページは公開しない（再取得は build_data.py --fetch）
+tools/src/
+__pycache__/
