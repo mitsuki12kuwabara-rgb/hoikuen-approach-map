@@ -29,6 +29,15 @@
   .brand .sub{font-size:11px;color:var(--sub);margin-top:2px}
   .hbtn{margin-left:auto;background:#fff;border:1px solid var(--line);border-radius:20px;font-size:12px;color:var(--sub);padding:5px 10px;white-space:nowrap}
   .hbtn + .hbtn{margin-left:0}
+  .syncChip{margin-left:auto;border:1px solid var(--line);background:#fff;border-radius:20px;font-size:11.5px;font-weight:700;padding:5px 9px;white-space:nowrap;cursor:pointer;color:var(--sub)}
+  .syncChip + .hbtn{margin-left:6px}
+  .syncChip.s-ok{color:#1b7a46;border-color:#bfe3cc;background:#f1faf4}
+  .syncChip.s-warn{color:#9a5a00;border-color:#f1d29c;background:#fff8ea}
+  .syncChip.s-err{color:#b42318;border-color:#f3c0bb;background:#fff3f2}
+  .syncChip.s-busy{color:var(--brand-d)}
+  .kmsg{display:none;background:#fff3f2;color:#b42318;border-radius:10px;padding:9px 11px;font-size:13px;margin-bottom:10px}
+  .khint{font-size:12.5px;color:var(--sub);line-height:1.6;margin:6px 0 0}
+  .syncbox{border:1px solid var(--line);border-radius:12px;padding:10px 12px;background:var(--soft);font-size:13px;line-height:1.7}
 
   /* 進捗（数字） */
   .prog{margin-top:10px;background:var(--soft);border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer}
@@ -235,6 +244,7 @@
           <h1>保育園アプローチマップ</h1>
           <div class="sub">世田谷区・杉並区｜テレアポ〜モニター獲得の進捗</div>
         </div>
+        <button class="syncChip" id="syncChip" title="チームで共有（Googleスプレッドシート）"></button>
         <button class="hbtn" id="infoBtn" title="使い方・記録の保存">ⓘ</button>
       </div>
       <div class="headExtra">
@@ -323,6 +333,24 @@
     <div class="mbody" id="iBody"></div>
   </div>
 </div>
+<!-- 合言葉（チーム共有） -->
+<div class="mask" id="kMask">
+  <div class="modal">
+    <div class="mhead"><h2>チームで共有する</h2><button class="x" data-close="kMask">×</button></div>
+    <div class="mbody">
+      <div class="kmsg" id="kMsg"></div>
+      <div class="fgroup"><label>あなたの名前（履歴に「だれが記録したか」として残ります）</label>
+        <input class="tinput" id="kName" type="text" placeholder="例）桑原" autocomplete="name"></div>
+      <div class="fgroup"><label>チームの合言葉</label>
+        <input class="tinput" id="kKey" type="password" placeholder="チームで決めた合言葉" autocomplete="current-password"></div>
+      <p class="khint">記録はチームのGoogleスプレッドシートに保存され、全員の地図に反映されます。合言葉はこの端末に覚えておくので、入れるのは最初の一度だけです。電波が悪いときは端末にいったん保存し、つながったらまとめて送ります。</p>
+    </div>
+    <div class="mfoot">
+      <button class="reset" id="kLocal">この端末だけで使う</button>
+      <button class="go" id="kGo">つなぐ</button>
+    </div>
+  </div>
+</div>
 <input type="file" id="importFile" accept=".json,application/json" style="display:none">
 <div class="toast" id="toast"></div>
 
@@ -332,6 +360,7 @@
 <script src="landmarks.js"></script>
 <script src="basemap.js"></script>
 <script src="data.js"></script>
+<script src="sync-config.js"></script>
 <script>
 (function(){
 "use strict";
@@ -359,6 +388,16 @@ var PRIO={"3":"高","2":"中","1":"低"};
 var LSKEY="hoiku_approach_records_v1", REC={};
 try{ REC=JSON.parse(localStorage.getItem(LSKEY)||"{}")||{}; }catch(e){ REC={}; }
 function saveREC(){ try{ localStorage.setItem(LSKEY, JSON.stringify(REC)); return true; }catch(e){ toast("保存できませんでした（ブラウザの設定をご確認ください）"); return false; } }
+/* チーム共有（Googleスプレッドシート）。URLは sync-config.js、合言葉と名前は端末ごとに保存 */
+function lsGet(k){ try{ return localStorage.getItem(k); }catch(e){ return null; } }
+function lsSet(k,v){ try{ if(v==null) localStorage.removeItem(k); else localStorage.setItem(k,v); }catch(e){} }
+var SYNC={
+  url:(window.HOIKU_SYNC_URL||"").trim(),
+  key:lsGet("hoiku_sync_key")||"", name:lsGet("hoiku_sync_name")||"",
+  local:lsGet("hoiku_sync_local")==="1",        // 「この端末だけで使う」を選んだ
+  pending:{}, state:"off", lastOk:lsGet("hoiku_sync_last")||"", busy:false, err:""
+};
+try{ SYNC.pending=JSON.parse(lsGet("hoiku_pending_v1")||"{}")||{}; }catch(e){ SYNC.pending={}; }
 var FMAP={}; F.forEach(function(f){FMAP[f.id]=f;});
 function recOf(id){ var r=REC[id]; if(r) return r; var f=FMAP[id]; return (f&&f.seed)?f.seed:{status:"todo"}; }
 function stageOf(id){ var s=recOf(id).status; return SMAP[s]?s:"todo"; }
@@ -372,7 +411,9 @@ function editRec(id, fn){
   var r=REC[id] ? REC[id] : JSON.parse(JSON.stringify(recOf(id)));
   fn(r);
   r.updatedAt=now(); r.ts=Date.now();
+  if(SYNC.name) r.by=SYNC.name;
   REC[id]=r; saveREC();
+  markPending(id);
   refreshOne(id);
   return r;
 }
@@ -625,7 +666,7 @@ function openDetail(id, fly){
   else if(window.innerWidth>820){ map.panTo([f.lat,f.lng],{animate:true}); }
   document.querySelectorAll('.card').forEach(function(c){c.classList.toggle('active',c.getAttribute('data-id')===id);});
 }
-function addLog(r,text){ r.log=r.log||[]; r.log.unshift({at:now(),text:text}); if(r.log.length>60) r.log.length=60; }
+function addLog(r,text){ r.log=r.log||[]; var x={at:now(),text:text,k:Date.now().toString(36)+Math.random().toString(36).slice(2,6)}; if(SYNC.name) x.by=SYNC.name; r.log.unshift(x); if(r.log.length>60) r.log.length=60; }
 function bindDetail(id){
   var f=FMAP[id];
   $('stepper').addEventListener('click',function(e){
@@ -782,14 +823,27 @@ function fillInfo(){
   '<p>世田谷区・杉並区の保育園 <b>'+F.length+'</b> 園（電話番号あり '+META.with_tel+' 園）を地図にしています。ピンをタップすると、電話をかけたり、進み具合を記録できます。</p>'+
   '<h3>進み方（7段階＋ダメだった）</h3><p>0 未着手 → 1 テレアポ → 2 FAX・メール → 3 日程調整 → 4 インタビュー → 5 アンケート → 6 継続的関係（モニター獲得）。断られた園は「連絡済み・ダメだった」。</p>'+
   '<h3>色の見方</h3><p>🟠 オレンジ＝関係が進行中（数字＝段階）／🔵 水色（半透明）＝次に着手すべき園（推奨度 高ほど濃く大きい）／⚪ グレー（半透明）＝未着手／⚫ 暗いグレー（半透明）＝連絡済み・ダメだった。</p>'+
-  '<h3>記録の保存（大事）</h3><p>記録は<b>この端末のブラウザの中</b>に保存されます（いま '+n+' 園分）。サーバーには送りません。PCとスマホは別々なので、引き継ぐときは「JSONで保存」→もう一方で「JSONを読み込む」をしてください（新しいほうの記録が残ります）。機種変更やブラウザのデータ消去に備えて、ときどきJSONかCSVで保存してください。</p>'+
+  '<h3>チームで共有（Googleスプレッドシート）</h3>'+syncInfoHTML()+
+  '<h3>記録の保存・バックアップ</h3><p>記録はまず<b>この端末のブラウザの中</b>に保存されます（いま '+n+' 園分）。'+(syncOn()?'チーム共有がオンなので、スプレッドシートにも送られます。':'チーム共有を使わないときは、PCとスマホは別々です。引き継ぐときは「JSONで保存」→もう一方で「JSONを読み込む」をしてください（新しいほうの記録が残ります）。')+'念のため、ときどきJSONかCSVで保存してください。</p>'+
   '<div class="btnrow"><button id="expCsv">📊 CSVで保存（Excel用）</button><button id="expJson">💾 JSONで保存（バックアップ）</button><button id="impJson">📥 JSONを読み込む</button></div>'+
   '<h3>最初から入っている記録</h3><p>PC内の資料（事業関連／04_需要調査／保育園）から、南八幡山・松沢・烏山翼・上北沢こぐま・えにっくす八幡山・ベネッセ杉並和泉の進み具合を初期値として入れています。違っていたら詳細で直してください。</p>'+
   '<h3>データの出典</h3><p>施設・座標：MITSU 子どもマップ（child-maps）。電話番号・定員：<a href="https://www.city.setagaya.lg.jp/02243/1578.html" target="_blank" rel="noopener">世田谷区 認可保育園(定員数)</a>（5地域）、<a href="https://www.city.suginami.tokyo.jp/shisetsu/kosodate/kuritsu/index.html" target="_blank" rel="noopener">杉並区 区立保育園</a>、<a href="https://www.city.suginami.tokyo.jp/s058/1101.html" target="_blank" rel="noopener">杉並区 私立保育園一覧</a>。子どもマップにない園は国土地理院の住所検索で位置を求めました。地図：地理院タイル。データ作成日 '+esc(META.generated)+'。</p>'+
   '<p style="color:var(--sub);font-size:12px">電話番号・園名は作成時点のものです。かける前に名前を確かめてください。</p>';
+  var sk=$('syncKeyBtn'); if(sk) sk.addEventListener('click',function(){ closeMask('iMask'); openKey(); });
+  var sn=$('syncNowBtn'); if(sn) sn.addEventListener('click',function(){ if(pendingIds().length) flush(); pull(); toast("同期しています"); });
+  var so=$('syncOffBtn'); if(so) so.addEventListener('click',function(){ SYNC.local=true; lsSet("hoiku_sync_local","1"); setSyncState(); fillInfo(); toast("この端末だけで記録します"); });
   $('expCsv').addEventListener('click',exportCsv);
   $('expJson').addEventListener('click',exportJson);
   $('impJson').addEventListener('click',function(){ $('importFile').click(); });
+}
+function syncInfoHTML(){
+  if(!SYNC.url) return '<div class="syncbox">まだ準備されていません（スプレッドシートの窓口URLを <code>sync-config.js</code> に入れると使えます。手順は <code>gas/README.md</code>）。</div>';
+  var n=pendingIds().length;
+  var st=SYNC.local?'この端末だけで記録しています（共有はオフ）':(!SYNC.key?'合言葉がまだ入っていません':'<b>共有中</b>　記録者名：'+esc(SYNC.name)+'<br>最後に同期：'+esc(SYNC.lastOk||'まだ')+(n?'<br>未送信：'+n+' 園（つながったら自動で送ります）':''));
+  return '<div class="syncbox">'+st+'</div>'+
+    '<p>記録は園ごとにスプレッドシートの1行に保存され、全員の地図に反映されます。同じ園を同時に記録したときは、<b>新しいほうの記録が残ります</b>。電話・訪問の履歴は「履歴」シートに記録者名つきで積み上がり、消えません。</p>'+
+    '<div class="btnrow"><button id="syncKeyBtn">🔑 '+(SYNC.key&&!SYNC.local?'名前・合言葉を変える':'合言葉を入れて共有する')+'</button>'+
+    (syncOn()?'<button id="syncNowBtn">🔄 今すぐ同期</button><button id="syncOffBtn">📱 この端末だけで使う</button>':'')+'</div>';
 }
 $('infoBtn').addEventListener('click',function(){ fillInfo(); openMask('iMask'); });
 function stamp(){ var d=new Date(); return d.getFullYear()+("0"+(d.getMonth()+1)).slice(-2)+("0"+d.getDate()).slice(-2); }
@@ -815,9 +869,9 @@ $('importFile').addEventListener('change',function(){
       var j=JSON.parse(rd.result), recs=j.records||j, add=0, upd=0, keep=0;
       Object.keys(recs).forEach(function(id){
         if(!FMAP[id]) return; var x=recs[id], cur=REC[id];
-        if(!cur){ REC[id]=x; add++; } else if((x.ts||0)>(cur.ts||0)){ REC[id]=x; upd++; } else keep++;
+        if(!cur){ REC[id]=x; add++; markPending(id,true); } else if((x.ts||0)>(cur.ts||0)){ REC[id]=x; upd++; markPending(id,true); } else keep++;
       });
-      saveREC(); F.forEach(function(f){ markers[f.id].setIcon(iconFor(f.id)); markers[f.id].setZIndexOffset(zOf(f.id)); });
+      saveREC(); scheduleFlush(); F.forEach(function(f){ markers[f.id].setIcon(iconFor(f.id)); markers[f.id].setZIndexOffset(zOf(f.id)); });
       render(); fillInfo(); toast("読み込みました：追加 "+add+"・更新 "+upd+"・こちらが新しい "+keep);
     }catch(e){ toast("読み込めませんでした（このアプリのJSONか確認してください）"); }
   };
@@ -825,6 +879,136 @@ $('importFile').addEventListener('change',function(){
 });
 
 function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('on'); clearTimeout(t._t); t._t=setTimeout(function(){t.classList.remove('on');},2600); }
+
+/* ========== チーム共有（Googleスプレッドシート） ==========
+ * ・記録するとまず端末に保存し、つながっていればスプレッドシートへ送る（電波が悪いときは「未送信」として貯めておき、つながったらまとめて送る）
+ * ・同じ園を同時に記録したら、更新時刻が新しいほうが残る
+ * ・開いたとき／画面に戻ったとき／90秒ごとに、ほかの人の記録を取り込む
+ */
+function syncOn(){ return !!(SYNC.url && SYNC.key && !SYNC.local); }
+function pendingIds(){ return Object.keys(SYNC.pending); }
+function savePending(){ lsSet("hoiku_pending_v1",JSON.stringify(SYNC.pending)); }
+function markPending(id,noFlush){
+  if(!SYNC.url || SYNC.local) return;
+  SYNC.pending[id]=1; savePending(); setSyncState();
+  if(!noFlush) scheduleFlush();
+}
+var flushTimer=null;
+function scheduleFlush(ms){ clearTimeout(flushTimer); flushTimer=setTimeout(flush, ms==null?1200:ms); }
+function api(payload){
+  payload.key=SYNC.key;
+  return fetch(SYNC.url,{method:"POST",redirect:"follow",headers:{"Content-Type":"text/plain;charset=utf-8"},body:JSON.stringify(payload)})
+    .then(function(r){ if(!r.ok) throw new Error("HTTP "+r.status); return r.json(); })
+    .then(function(j){
+      if(j && j.ok===false && j.error==="key"){ SYNC.key=""; lsSet("hoiku_sync_key",null); setSyncState(); openKey("合言葉が変わったか、ちがっています。もう一度入れてください。"); throw new Error("key"); }
+      if(!j || j.ok===false) throw new Error((j&&j.message)||"error");
+      return j;
+    });
+}
+function infoOf(id){ var f=FMAP[id], s=SMAP[stageOf(id)]; return {ku:f.ku,name:f.name,step:s.step>=0?s.step:"×",stage:s.label}; }
+function flush(){
+  if(!syncOn() || SYNC.busy) return;
+  var ids=pendingIds().filter(function(id){return FMAP[id];});
+  if(!ids.length){ setSyncState(); return; }
+  if(navigator.onLine===false){ setSyncState(); return; }
+  SYNC.busy=true; setSyncState();
+  var batch=ids.slice(0,80), sent={};
+  var items=batch.map(function(id){ var r=JSON.parse(JSON.stringify(recOf(id))); if(!r.ts) r.ts=1; sent[id]=r.ts; return {id:id,rec:r,info:infoOf(id)}; });
+  api({action:"push",who:SYNC.name,total:F.length,items:items}).then(function(j){
+    var lost=0;
+    (j.accepted||[]).forEach(function(id){ if((recOf(id).ts||1)===sent[id]) delete SYNC.pending[id]; });
+    Object.keys(j.rejected||{}).forEach(function(id){
+      if((recOf(id).ts||1)!==sent[id]) return;      // 送っている間にまた直した → 次で送る
+      var s=j.rejected[id]; if((s.ts||0)>(sent[id]||0)) lost++;
+      REC[id]=s; delete SYNC.pending[id]; repaint(id);
+    });
+    savePending(); saveREC(); okNow();
+    if(lost){ render(); toast("ほかの人の新しい記録があったので、そちらを表示しました（"+lost+"園）"); }
+    SYNC.busy=false; setSyncState();
+    if(pendingIds().length) scheduleFlush(300);
+  }).catch(function(e){
+    SYNC.busy=false; SYNC.err=String(e&&e.message||e); setSyncState("err");
+    if(e&&e.message!=="key") scheduleFlush(30000);
+  });
+}
+function pull(){
+  if(!syncOn() || SYNC.busy || navigator.onLine===false) { setSyncState(); return Promise.resolve(); }
+  SYNC.busy=true; setSyncState();
+  return api({action:"pull"}).then(function(j){
+    var recs=j.records||{}, changed=0;
+    Object.keys(recs).forEach(function(id){
+      if(!FMAP[id]) return; var s=recs[id], l=REC[id];
+      if(SYNC.pending[id] && l && (l.ts||0)>(s.ts||0)) return;     // こちらの未送信のほうが新しい
+      if(!l || (s.ts||0)>(l.ts||0)){ REC[id]=s; delete SYNC.pending[id]; changed++; repaint(id); }
+    });
+    // シートにまだない記録（共有を始める前にこの端末でつけた記録・最初からの初期値）を送る
+    Object.keys(REC).forEach(function(id){ if(FMAP[id] && (!recs[id] || (REC[id].ts||0)>(recs[id].ts||0))) SYNC.pending[id]=1; });
+    F.forEach(function(f){ if(f.seed && !REC[f.id] && !recs[f.id]) SYNC.pending[f.id]=1; });
+    savePending(); if(changed) saveREC();
+    SYNC.busy=false; okNow();
+    if(changed){ render(); if(activeId && !isTyping()) openDetail(activeId,false); }
+    if(pendingIds().length) scheduleFlush(200);
+  }).catch(function(e){ SYNC.busy=false; SYNC.err=String(e&&e.message||e); setSyncState("err"); });
+}
+function isTyping(){ var a=document.activeElement; return a && $('detail').contains(a) && /INPUT|TEXTAREA/.test(a.tagName); }
+function repaint(id){ var m=markers[id]; if(m){ m.setIcon(iconFor(id)); m.setZIndexOffset(zOf(id)); } }
+function okNow(){ SYNC.err=""; SYNC.lastOk=now(); lsSet("hoiku_sync_last",SYNC.lastOk); setSyncState(); }
+function setSyncState(force){
+  var n=pendingIds().length, st, txt;
+  if(!SYNC.url || SYNC.local){ st="off"; txt="📱 端末のみ"; }
+  else if(!SYNC.key){ st="warn"; txt="🔑 合言葉"; }
+  else if(SYNC.busy){ st="busy"; txt="🔄 同期中…"; }
+  else if(navigator.onLine===false){ st="warn"; txt="📴 オフライン"+(n?"・未送信 "+n:""); }
+  else if(force==="err"||SYNC.err){ st="err"; txt="⚠ つながりません"+(n?"・未送信 "+n:""); }
+  else if(n){ st="warn"; txt="⏳ 未送信 "+n; }
+  else { st="ok"; txt="☁ 共有中"; }
+  SYNC.state=st;
+  var c=$('syncChip'); if(c){ c.textContent=txt; c.className="syncChip s-"+st; }
+}
+/* 合言葉の画面 */
+function openKey(msg){
+  $('kMsg').textContent=msg||""; $('kMsg').style.display=msg?"block":"none";
+  $('kName').value=SYNC.name; $('kKey').value=SYNC.key;
+  openMask('kMask'); setTimeout(function(){ (SYNC.name?$('kKey'):$('kName')).focus(); },120);
+}
+$('kGo').addEventListener('click',function(){
+  var name=$('kName').value.trim(), key=$('kKey').value.trim();
+  if(!name){ $('kMsg').textContent="名前を入れてください（履歴に「だれが記録したか」として残ります）"; $('kMsg').style.display="block"; return; }
+  if(!key){ $('kMsg').textContent="合言葉を入れてください"; $('kMsg').style.display="block"; return; }
+  var b=this; b.disabled=true; b.textContent="確認しています…";
+  var oldKey=SYNC.key; SYNC.key=key;
+  api({action:"ping"}).then(function(){
+    SYNC.name=name; SYNC.local=false; lsSet("hoiku_sync_key",key); lsSet("hoiku_sync_name",name); lsSet("hoiku_sync_local",null);
+    closeMask('kMask'); toast("つながりました。記録はチームで共有されます"); okNow(); pull();
+  }).catch(function(e){
+    SYNC.key=oldKey;
+    $('kMsg').textContent=(e&&e.message==="key")?"合言葉がちがいます":"つながりませんでした（電波・URLを確認してください）："+(e&&e.message||"");
+    $('kMsg').style.display="block"; openMask('kMask');
+  }).then(function(){ b.disabled=false; b.textContent="つなぐ"; });
+});
+$('kKey').addEventListener('keydown',function(e){ if(e.key==="Enter") $('kGo').click(); });
+$('kLocal').addEventListener('click',function(){
+  SYNC.local=true; lsSet("hoiku_sync_local","1"); closeMask('kMask'); setSyncState();
+  toast("この端末だけで記録します（ⓘからいつでも共有に切り替えられます）");
+});
+$('syncChip').addEventListener('click',function(){
+  if(!SYNC.url){ fillInfo(); openMask('iMask'); return; }
+  if(SYNC.local || !SYNC.key){ openKey(); return; }
+  if(pendingIds().length) flush(); else pull();
+  toast(SYNC.lastOk?"最後に同期："+SYNC.lastOk:"同期しています");
+});
+window.addEventListener('online',function(){ setSyncState(); flush(); setTimeout(pull,1500); });
+window.addEventListener('offline',function(){ setSyncState(); });
+document.addEventListener('visibilitychange',function(){ if(!document.hidden){ if(pendingIds().length) flush(); pull(); } });
+setInterval(function(){ if(!document.hidden){ if(pendingIds().length) flush(); else pull(); } },90000);
+window.addEventListener('pagehide',function(){
+  // 閉じる直前の未送信分（届かなくても、次に開いたときにまた送ります）
+  if(!syncOn() || !pendingIds().length || !navigator.sendBeacon) return;
+  try{
+    var items=pendingIds().slice(0,40).map(function(id){ return {id:id,rec:recOf(id),info:infoOf(id)}; });
+    navigator.sendBeacon(SYNC.url,new Blob([JSON.stringify({key:SYNC.key,action:"push",who:SYNC.name,total:F.length,items:items})],{type:"text/plain;charset=utf-8"}));
+  }catch(e){}
+});
 
 /* ========== ボトムシート（スマホ）：神社マップと同じ操作 ========== */
 (function(){
@@ -883,6 +1067,8 @@ function toast(msg){ var t=$('toast'); t.textContent=msg; t.classList.add('on');
 /* ========== 起動 ========== */
 if(!tabList("next").length) state.tab = tabList("prog").length ? "prog" : "all";
 render();
+setSyncState();
+if(SYNC.url && !SYNC.local){ if(SYNC.key) pull(); else setTimeout(function(){ openKey(); },400); }
 try{ if(!localStorage.getItem("hoiku_seen")){ localStorage.setItem("hoiku_seen","1"); setTimeout(function(){ toast("ピンをタップ → 電話・記録。🔍で絞り込み"); },800); } }catch(e){}
 })();
 </script>
